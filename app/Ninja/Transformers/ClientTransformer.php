@@ -1,9 +1,6 @@
 <?php namespace App\Ninja\Transformers;
 
-use App\Models\Account;
 use App\Models\Client;
-use App\Models\Contact;
-use League\Fractal;
 
 /**
  * @SWG\Definition(definition="Client", @SWG\Xml(name="Client"))
@@ -44,30 +41,48 @@ class ClientTransformer extends EntityTransformer
         'contacts',
     ];
 
+    /**
+     * @var array
+     */
     protected $availableIncludes = [
         'invoices',
         'credits',
-        'expenses',
     ];
-    
+
+    /**
+     * @param Client $client
+     * @return \League\Fractal\Resource\Collection
+     */
     public function includeContacts(Client $client)
     {
         $transformer = new ContactTransformer($this->account, $this->serializer);
         return $this->includeCollection($client->contacts, $transformer, ENTITY_CONTACT);
     }
 
+    /**
+     * @param Client $client
+     * @return \League\Fractal\Resource\Collection
+     */
     public function includeInvoices(Client $client)
     {
-        $transformer = new InvoiceTransformer($this->account, $this->serializer);
+        $transformer = new InvoiceTransformer($this->account, $this->serializer, $client);
         return $this->includeCollection($client->invoices, $transformer, ENTITY_INVOICE);
     }
 
+    /**
+     * @param Client $client
+     * @return \League\Fractal\Resource\Collection
+     */
     public function includeCredits(Client $client)
     {
         $transformer = new CreditTransformer($this->account, $this->serializer);
         return $this->includeCollection($client->credits, $transformer, ENTITY_CREDIT);
     }
 
+    /**
+     * @param Client $client
+     * @return \League\Fractal\Resource\Collection
+     */
     public function includeExpenses(Client $client)
     {
         $transformer = new ExpenseTransformer($this->account, $this->serializer);
@@ -75,15 +90,17 @@ class ClientTransformer extends EntityTransformer
     }
 
 
+    /**
+     * @param Client $client
+     * @return array
+     */
     public function transform(Client $client)
     {
-        return [
+        return array_merge($this->getDefaults($client), [
             'id' => (int) $client->public_id,
             'name' => $client->name,
             'balance' => (float) $client->balance,
             'paid_to_date' => (float) $client->paid_to_date,
-            'user_id' => (int) $client->user->public_id + 1,
-            'account_key' => $this->account->account_key,
             'updated_at' => $this->getTimestamp($client->updated_at),
             'archived_at' => $this->getTimestamp($client->deleted_at),
             'address1' => $client->address1,
@@ -106,6 +123,6 @@ class ClientTransformer extends EntityTransformer
             'currency_id' => (int) $client->currency_id,
             'custom_value1' => $client->custom_value1,
             'custom_value2' => $client->custom_value2,
-        ];
+        ]);
     }
 }

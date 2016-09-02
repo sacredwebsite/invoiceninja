@@ -1,13 +1,20 @@
 <?php namespace App\Ninja\Repositories;
 
 use DB;
-use App\Ninja\Repositories\BaseRepository;
+use App\Models\Product;
 
 class ProductRepository extends BaseRepository
 {
     public function getClassName()
     {
         return 'App\Models\Product';
+    }
+
+    public function all()
+    {
+        return Product::scope()
+                ->withTrashed()
+                ->get();
     }
 
     public function find($accountId)
@@ -29,4 +36,54 @@ class ProductRepository extends BaseRepository
                     'products.deleted_at'
                 );
     }
+
+    public function save($data, $product = null)
+    {
+        $publicId = isset($data['public_id']) ? $data['public_id'] : false;
+
+        if ($product) {
+            // do nothing
+        } elseif ($publicId) {
+            $product = Product::scope($publicId)->firstOrFail();
+            \Log::warning('Entity not set in product repo save');
+        } else {
+            $product = Product::createNew();
+        }
+
+        $product->fill($data);
+        $product->save();
+
+        return $product;
+    }
+
+    public function findPhonetically($productName)
+    {
+        $productNameMeta = metaphone($productName);
+
+        $map = [];
+        $max = SIMILAR_MIN_THRESHOLD;
+        $productId = 0;
+
+        $products = Product::scope()
+                        ->with('default_tax_rate')
+                        ->get();
+
+        foreach ($products as $product) {
+            if ( ! $product->product_key) {
+                continue;
+            }
+
+            $map[$product->id] = $product;
+            $similar = similar_text($productNameMeta, metaphone($product->product_key), $percent);
+
+            if ($percent > $max) {
+                $productId = $product->id;
+                $max = $percent;
+            }
+        }
+
+        return ($productId && isset($map[$productId])) ? $map[$productId] : null;
+    }
+
+
 }

@@ -1,20 +1,16 @@
 <?php namespace App\Http\Controllers;
-// vendor
-use App\Models\Expense;
-use app\Ninja\Repositories\ExpenseRepository;
-use App\Ninja\Transformers\ExpenseTransformer;
-use App\Services\ExpenseService;
-use Utils;
-use Response;
-use Input;
-use Auth;
 
+use App\Models\Expense;
+use App\Ninja\Repositories\ExpenseRepository;
+use App\Services\ExpenseService;
 
 class ExpenseApiController extends BaseAPIController
 {
     // Expenses
     protected $expenseRepo;
     protected $expenseService;
+
+    protected $entityType = ENTITY_EXPENSE;
 
     public function __construct(ExpenseRepository $expenseRepo, ExpenseService $expenseService)
     {
@@ -26,20 +22,12 @@ class ExpenseApiController extends BaseAPIController
 
     public function index()
     {
-
         $expenses = Expense::scope()
             ->withTrashed()
+            ->with('client', 'invoice', 'vendor')
             ->orderBy('created_at','desc');
 
-        $expenses = $expenses->paginate();
-
-        $transformer = new ExpenseTransformer(Auth::user()->account, Input::get('serializer'));
-        $paginator = Expense::scope()->withTrashed()->paginate();
-
-        $data = $this->createCollection($expenses, $transformer, ENTITY_EXPENSE, $paginator);
-
-        return $this->response($data);
-
+        return $this->listResponse($expenses);
     }
 
     public function update()

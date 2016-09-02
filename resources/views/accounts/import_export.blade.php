@@ -4,9 +4,7 @@
     @parent
 
     <style type="text/css">
-        .contact-file,
-        .task-file,
-        .payment-file {
+        .import-file {
             display: none;
         }
     </style>
@@ -34,7 +32,7 @@
 
         @foreach (\App\Services\ImportService::$entityTypes as $entityType)
             {!! Former::file("{$entityType}_file")
-                    ->addGroupClass("{$entityType}-file") !!}
+                    ->addGroupClass("import-file {$entityType}-file") !!}
         @endforeach
 
         {!! Former::actions( Button::info(trans('texts.upload'))->submit()->large()->appendIcon(Icon::create('open'))) !!}
@@ -55,68 +53,48 @@
                 ->addOption('CSV', 'CSV')
                 ->addOption('XLS', 'XLS')
                 ->addOption('JSON', 'JSON')
-                ->style('max-width: 200px') !!}
+                ->style('max-width: 200px')
+                ->inlineHelp('export_help') !!}
 
-        {!! Former::checkbox('entity_types')
-                ->label('include')
-                ->addGroupClass('entity-types')
-                ->checkboxes([
-                    trans('texts.clients') => array('name' => ENTITY_CLIENT, 'value' => 1),
-                    trans('texts.tasks') => array('name' => ENTITY_TASK, 'value' => 1),
-                    trans('texts.invoices') => array('name' => ENTITY_INVOICE, 'value' => 1),
-                    trans('texts.payments') => array('name' => ENTITY_PAYMENT, 'value' => 1),
-                ])->check(ENTITY_CLIENT)->check(ENTITY_TASK)->check(ENTITY_INVOICE)->check(ENTITY_PAYMENT) !!}
 
-        {!! Former::actions( Button::primary(trans('texts.download'))->submit()->large()->appendIcon(Icon::create('download-alt'))) !!}            
+        {!! Former::inline_radios('include_radio')
+                ->onchange('onIncludeChange()')
+                ->label(trans('texts.include'))
+                ->radios([
+                    trans('texts.all') . ' &nbsp; ' => ['value' => 'all', 'name' => 'include'],
+                    trans('texts.selected') => ['value' => 'selected', 'name' => 'include'],
+                ])->check('all') !!}
+
+
+        <div class="form-group entity-types">
+            <label class="control-label col-lg-4 col-sm-4"></label>
+            <div class="col-lg-3 col-sm-2">
+                @include('partials/checkbox', ['field' => 'clients'])
+                @include('partials/checkbox', ['field' => 'contacts'])
+                @include('partials/checkbox', ['field' => 'credits'])
+                @include('partials/checkbox', ['field' => 'tasks'])
+                @include('partials/checkbox', ['field' => 'invoices'])
+            </div>
+            <div class="col-lg-3 col-sm-3">
+                @include('partials/checkbox', ['field' => 'quotes'])
+                @include('partials/checkbox', ['field' => 'recurring'])
+                @include('partials/checkbox', ['field' => 'payments'])
+                @include('partials/checkbox', ['field' => 'vendors'])
+                @include('partials/checkbox', ['field' => 'vendor_contacts'])
+            </div>
+        </div>
+
+        {!! Former::actions( Button::primary(trans('texts.download'))->submit()->large()->appendIcon(Icon::create('download-alt'))) !!}
     </div>
 </div>
 {!! Former::close() !!}
 
 
-{!! Former::open('settings/cancel_account')->addClass('cancel-account') !!}
-<div class="panel panel-default">
-  <div class="panel-heading">
-    <h3 class="panel-title">{!! trans('texts.cancel_account') !!}</h3>
-  </div>
-    <div class="panel-body">
-    {!! Former::actions( Button::danger(trans('texts.cancel_account'))->large()->withAttributes(['onclick' => 'showConfirm()'])->appendIcon(Icon::create('trash'))) !!}
-    </div>
-</div>
-
-<div class="modal fade" id="confirmCancelModal" tabindex="-1" role="dialog" aria-labelledby="confirmCancelModalLabel" aria-hidden="true">
-  <div class="modal-dialog" style="min-width:150px">
-    <div class="modal-content">
-      <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-        <h4 class="modal-title" id="confirmCancelModalLabel">{!! trans('texts.cancel_account') !!}</h4>
-      </div>
-
-      <div style="background-color: #fff; padding-left: 16px; padding-right: 16px">
-        &nbsp;<p>{{ trans('texts.cancel_account_message') }}</p>&nbsp;
-        &nbsp;<p>{!! Former::textarea('reason')->placeholder(trans('texts.reason_for_canceling'))->raw() !!}</p>&nbsp;        
-      </div>
-
-      <div class="modal-footer" style="margin-top: 0px">
-        <button type="button" class="btn btn-default" data-dismiss="modal">{{ trans('texts.go_back') }}</button>
-        <button type="button" class="btn btn-danger" onclick="confirmCancel()">{{ trans('texts.cancel_account') }}</button>         
-      </div>
-
-    </div>
-  </div>
-</div>
-
-{!! Former::close() !!}  
-
-
 <script type="text/javascript">
-
-  function showConfirm() {
-    $('#confirmCancelModal').modal('show'); 
-  }
-
-  function confirmCancel() {
-    $('form.cancel-account').submit();
-  }
+  $(function() {
+      setFileTypesVisible();
+      onIncludeChange();
+  });
 
   function setEntityTypesVisible() {
     var selector = '.entity-types input[type=checkbox]';
@@ -142,7 +120,22 @@
                 @endif
             @endforeach
         }
+        @if ($source === IMPORT_JSON)
+            if (val === '{{ $source }}') {
+                $('.JSON-file').show();
+            }
+        @endif
     @endforeach
+  }
+
+  function onIncludeChange() {
+      var $checkboxes = $('input[type=checkbox]');
+      var val = $('input[name=include]:checked').val()
+      if (val == 'all') {
+          $checkboxes.attr('disabled', true);
+      } else {
+          $checkboxes.removeAttr('disabled');
+      }
   }
 
 </script>

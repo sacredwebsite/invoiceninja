@@ -6,10 +6,10 @@
 
   <div class="pull-right">
   {!! Button::normal(trans('texts.documentation'))->asLinkTo(NINJA_WEB_URL.'/api-documentation/')->withAttributes(['target' => '_blank'])->appendIcon(Icon::create('info-sign')) !!}
-  @if (Utils::isNinja())  
+  @if (Utils::isNinja() && !Utils::isReseller())
     {!! Button::normal(trans('texts.zapier'))->asLinkTo(ZAPIER_URL)->withAttributes(['target' => '_blank']) !!}
   @endif
-  @if (Utils::isPro())
+  @if (Utils::hasFeature(FEATURE_API))
     {!! Button::primary(trans('texts.add_token'))->asLinkTo(URL::to('/tokens/create'))->appendIcon(Icon::create('plus-sign')) !!}
   @endif
   </div>
@@ -53,7 +53,7 @@
 
   @if (Utils::isNinja() && !Utils::isReseller())
     <p>&nbsp;</p>
-    <script src="https://zapier.com/zapbook/embed/widget.js?services=invoice-ninja&container=false&limit=6"></script>
+    <script src="https://zapier.com/zapbook/embed/widget.js?guided_zaps=5627,6025,12216,8805,5628,6027&container=false&limit=6"></script>
   @endif
-  
+
 @stop

@@ -1,14 +1,22 @@
-<?php namespace app\Models;
+<?php namespace App\Models;
 
 use Eloquent;
 use Auth;
 use Cache;
-use App\Models\InvoiceDesign;
 
+/**
+ * Class InvoiceDesign
+ */
 class InvoiceDesign extends Eloquent
 {
+    /**
+     * @var bool
+     */
     public $timestamps = false;
 
+    /**
+     * @return mixed
+     */
     public static function getDesigns()
     {
         $account = Auth::user()->account;

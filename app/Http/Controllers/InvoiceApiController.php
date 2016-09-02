@@ -1,8 +1,6 @@
 <?php namespace App\Http\Controllers;
 
 use Auth;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Request;
 use Utils;
 use Response;
 use Input;
@@ -11,22 +9,23 @@ use App\Models\Invoice;
 use App\Models\Client;
 use App\Models\Contact;
 use App\Models\Product;
-use App\Models\Invitation;
 use App\Ninja\Repositories\ClientRepository;
 use App\Ninja\Repositories\PaymentRepository;
 use App\Ninja\Repositories\InvoiceRepository;
 use App\Ninja\Mailers\ContactMailer as Mailer;
-use App\Http\Controllers\BaseAPIController;
-use App\Ninja\Transformers\InvoiceTransformer;
-use App\Http\Requests\CreateInvoiceRequest;
-use App\Http\Requests\UpdateInvoiceRequest;
+use App\Http\Requests\InvoiceRequest;
+use App\Http\Requests\CreateInvoiceAPIRequest;
+use App\Http\Requests\UpdateInvoiceAPIRequest;
 use App\Services\InvoiceService;
+use App\Services\PaymentService;
 
 class InvoiceApiController extends BaseAPIController
 {
     protected $invoiceRepo;
 
-    public function __construct(InvoiceService $invoiceService, InvoiceRepository $invoiceRepo, ClientRepository $clientRepo, PaymentRepository $paymentRepo, Mailer $mailer)
+    protected $entityType = ENTITY_INVOICE;
+
+    public function __construct(InvoiceService $invoiceService, InvoiceRepository $invoiceRepo, ClientRepository $clientRepo, PaymentRepository $paymentRepo, Mailer $mailer, PaymentService $paymentService)
     {
         parent::__construct();
 
@@ -35,6 +34,7 @@ class InvoiceApiController extends BaseAPIController
         $this->paymentRepo = $paymentRepo;
         $this->invoiceService = $invoiceService;
         $this->mailer = $mailer;
+        $this->paymentService = $paymentService;
     }
 
     /**
@@ -55,36 +55,12 @@ class InvoiceApiController extends BaseAPIController
      */
     public function index()
     {
-        $paginator = Invoice::scope()->withTrashed();
-        $invoices = Invoice::scope()->withTrashed()
-                        ->with(array_merge(['invoice_items'], $this->getIncluded()));
+        $invoices = Invoice::scope()
+                        ->withTrashed()
+                        ->with('invoice_items', 'client')
+                        ->orderBy('created_at', 'desc');
 
-        if ($clientPublicId = Input::get('client_id')) {
-            $filter = function($query) use ($clientPublicId) {
-                $query->where('public_id', '=', $clientPublicId);
-            };
-            $invoices->whereHas('client', $filter);
-            $paginator->whereHas('client', $filter);
-        }
-
-        $invoices = $invoices->orderBy('created_at', 'desc')->paginate();
-
-        /*
-        // Add the first invitation link to the data
-        foreach ($invoices as $key => $invoice) {
-            foreach ($invoice->invitations as $subKey => $invitation) {
-                $invoices[$key]['link'] = $invitation->getLink();
-            }
-            unset($invoice['invitations']);
-        }
-        */
-
-        $transformer = new InvoiceTransformer(Auth::user()->account, Input::get('serializer'));
-        $paginator = $paginator->paginate();
-
-        $data = $this->createCollection($invoices, $transformer, 'invoices', $paginator);
-
-        return $this->response($data);
+        return $this->listResponse($invoices);
     }
 
         /**
@@ -104,18 +80,9 @@ class InvoiceApiController extends BaseAPIController
          * )
          */
 
-    public function show($publicId)
+    public function show(InvoiceRequest $request)
     {
-
-        $invoice = Invoice::scope($publicId)->withTrashed()->first();
-
-        if(!$invoice)
-            return $this->errorResponse(['message'=>'Invoice does not exist!'], 404);
-
-        $transformer = new InvoiceTransformer(\Auth::user()->account, Input::get('serializer'));
-        $data = $this->createItem($invoice, $transformer, 'invoice');
-
-        return $this->response($data);
+        return $this->itemResponse($request->entity());
     }
 
     /**
@@ -139,7 +106,7 @@ class InvoiceApiController extends BaseAPIController
      *   )
      * )
      */
-    public function store(CreateInvoiceRequest $request)
+    public function store(CreateInvoiceAPIRequest $request)
     {
         $data = Input::all();
         $error = null;
@@ -165,7 +132,9 @@ class InvoiceApiController extends BaseAPIController
                     'city',
                     'state',
                     'postal_code',
+                    'country_id',
                     'private_notes',
+                    'currency_code',
                 ] as $field) {
                     if (isset($data[$field])) {
                         $clientData[$field] = $data[$field];
@@ -192,8 +161,9 @@ class InvoiceApiController extends BaseAPIController
         $invoice = $this->invoiceService->save($data);
         $payment = false;
 
-        // Optionally create payment with invoice
-        if (isset($data['paid']) && $data['paid']) {
+        if (isset($data['auto_bill']) && boolval($data['auto_bill'])) {
+            $payment = $this->paymentService->autoBillInvoice($invoice);
+        } else if (isset($data['paid']) && $data['paid']) {
             $payment = $this->paymentRepo->save([
                 'invoice_id' => $invoice->id,
                 'client_id' => $client->id,
@@ -209,11 +179,15 @@ class InvoiceApiController extends BaseAPIController
             }
         }
 
-        $invoice = Invoice::scope($invoice->public_id)->with('client', 'invoice_items', 'invitations')->first();
-        $transformer = new InvoiceTransformer(\Auth::user()->account, Input::get('serializer'));
-        $data = $this->createItem($invoice, $transformer, 'invoice');
+        $invoice = Invoice::scope($invoice->public_id)
+                        ->with('client', 'invoice_items', 'invitations')
+                        ->first();
 
-        return $this->response($data);
+        if (isset($data['download_invoice']) && boolval($data['download_invoice'])) {
+            return $this->fileReponse($invoice->getFileName(), $invoice->getPDFString());
+        }
+
+        return $this->itemResponse($invoice);
     }
 
     private function prepareData($data, $client)
@@ -258,10 +232,11 @@ class InvoiceApiController extends BaseAPIController
         // initialize the line items
         if (isset($data['product_key']) || isset($data['cost']) || isset($data['notes']) || isset($data['qty'])) {
             $data['invoice_items'] = [self::prepareItem($data)];
-
             // make sure the tax isn't applied twice (for the invoice and the line item)
-            unset($data['invoice_items'][0]['tax_name']);
-            unset($data['invoice_items'][0]['tax_rate']);
+            unset($data['invoice_items'][0]['tax_name1']);
+            unset($data['invoice_items'][0]['tax_rate1']);
+            unset($data['invoice_items'][0]['tax_name2']);
+            unset($data['invoice_items'][0]['tax_rate2']);
         } else {
             foreach ($data['invoice_items'] as $index => $item) {
                 $data['invoice_items'][$index] = self::prepareItem($item);
@@ -302,31 +277,16 @@ class InvoiceApiController extends BaseAPIController
         return $item;
     }
 
-    public function emailInvoice()
+    public function emailInvoice(InvoiceRequest $request)
     {
-        $data = Input::all();
-        $error = null;
+        $invoice = $request->entity();
 
-        $invoice = Invoice::scope($data['id'])->withTrashed()->first();
+        $this->mailer->sendInvoice($invoice);
 
-        if(!$invoice)
-            return $this->errorResponse(['message'=>'Invoice does not exist.'], 400);
-
-
-        $this->mailer->sendInvoice($invoice, false, false);
-
-
-        if($error) {
-            return $this->errorResponse(['message'=>'There was an error sending the invoice'], 400);
-        }
-        else {
-            $response = json_encode(RESULT_SUCCESS, JSON_PRETTY_PRINT);
-        }
-
+        $response = json_encode(RESULT_SUCCESS, JSON_PRETTY_PRINT);
         $headers = Utils::getApiHeaders();
-        return Response::make($response, $error ? 400 : 200, $headers);
+        return Response::make($response, 200, $headers);
     }
-
 
         /**
          * @SWG\Put(
@@ -349,45 +309,25 @@ class InvoiceApiController extends BaseAPIController
          *   )
          * )
          */
-    public function update(UpdateInvoiceRequest $request, $publicId)
+    public function update(UpdateInvoiceAPIRequest $request, $publicId)
     {
-        if ($request->action == ACTION_ARCHIVE) {
-            $invoice = Invoice::scope($publicId)->firstOrFail();
-            $this->invoiceRepo->archive($invoice);
-
-            $transformer = new InvoiceTransformer(\Auth::user()->account, Input::get('serializer'));
-            $data = $this->createItem($invoice, $transformer, 'invoice');
-
-            return $this->response($data);
-        }
-        else if ($request->action == ACTION_CONVERT) {
-            $quote = Invoice::scope($publicId)->firstOrFail();
+        if ($request->action == ACTION_CONVERT) {
+            $quote = $request->entity();
             $invoice = $this->invoiceRepo->cloneInvoice($quote, $quote->id);
-
-            $transformer = new InvoiceTransformer(\Auth::user()->account, Input::get('serializer'));
-            $data = $this->createItem($invoice, $transformer, 'invoice');
-
-            return $this->response($data);
-        }
-        else if ($request->action == ACTION_RESTORE) {
-            $invoice = Invoice::scope($publicId)->withTrashed()->firstOrFail();
-            $this->invoiceRepo->restore($invoice);
-
-            $transformer = new InvoiceTransformer(\Auth::user()->account, Input::get('serializer'));
-            $data = $this->createItem($invoice, $transformer, 'invoice');
-
-            return $this->response($data);
+            return $this->itemResponse($invoice);
+        } elseif ($request->action) {
+            return $this->handleAction($request);
         }
 
         $data = $request->input();
         $data['public_id'] = $publicId;
-        $this->invoiceService->save($data);
+        $this->invoiceService->save($data, $request->entity());
 
-        $invoice = Invoice::scope($publicId)->with('client', 'invoice_items', 'invitations')->firstOrFail();
-        $transformer = new InvoiceTransformer(\Auth::user()->account, Input::get('serializer'));
-        $data = $this->createItem($invoice, $transformer, 'invoice');
+        $invoice = Invoice::scope($publicId)
+                        ->with('client', 'invoice_items', 'invitations')
+                        ->firstOrFail();
 
-        return $this->response($data);
+        return $this->itemResponse($invoice);
     }
 
         /**
@@ -412,18 +352,19 @@ class InvoiceApiController extends BaseAPIController
          * )
          */
 
-    public function destroy($publicId)
+    public function destroy(UpdateInvoiceAPIRequest $request)
     {
-        $data['public_id'] = $publicId;
-        $invoice = Invoice::scope($publicId)->firstOrFail();
+        $invoice = $request->entity();
 
         $this->invoiceRepo->delete($invoice);
 
-        $transformer = new InvoiceTransformer(\Auth::user()->account, Input::get('serializer'));
-        $data = $this->createItem($invoice, $transformer, 'invoice');
-
-        return $this->response($data);
-
+        return $this->itemResponse($invoice);
     }
 
+    public function download(InvoiceRequest $request)
+    {
+        $invoice = $request->entity();
+
+        return $this->fileReponse($invoice->getFileName(), $invoice->getPDFString());
+    }
 }

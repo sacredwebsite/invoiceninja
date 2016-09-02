@@ -4,11 +4,11 @@
 @section('content')
 
 <div class="row">
-    <div class="col-md-4">  
+    <div class="col-md-4">
         <div class="panel panel-default">
             <div class="panel-body">
-                <img src="{{ asset('images/totalinvoices.png') }}" 
-                    class="in-image" style="float:left"/>  
+                <img src="{{ asset('images/totalinvoices.png') }}"
+                    class="in-image" style="float:left"/>
                 <div style="overflow:hidden">
                     <div class="in-thin">
                         {{ trans('texts.total_revenue') }}
@@ -29,8 +29,8 @@
     <div class="col-md-4">
         <div class="panel panel-default">
             <div class="panel-body">
-                <img src="{{ asset('images/clients.png') }}" 
-                    class="in-image" style="float:left"/>  
+                <img src="{{ asset('images/clients.png') }}"
+                    class="in-image" style="float:left"/>
                 <div style="overflow:hidden">
                     <div class="in-thin">
                         {{ trans('texts.average_invoice') }}
@@ -51,8 +51,8 @@
     <div class="col-md-4">
         <div class="panel panel-default">
             <div class="panel-body">
-                <img src="{{ asset('images/totalincome.png') }}" 
-                    class="in-image" style="float:left"/>  
+                <img src="{{ asset('images/totalincome.png') }}"
+                    class="in-image" style="float:left"/>
                 <div style="overflow:hidden">
                     <div class="in-thin">
                         {{ trans('texts.outstanding') }}
@@ -81,9 +81,11 @@
             <div class="panel-heading" style="background-color:#0b4d78 !important">
                 <h3 class="panel-title in-bold-white">
                     <i class="glyphicon glyphicon-exclamation-sign"></i> {{ trans('texts.activity') }}
-                    <div class="pull-right" style="font-size:14px;padding-top:4px">
-                        {{ trans_choice('texts.invoices_sent', $invoicesSent) }}
-                    </div>
+                    @if ($invoicesSent)
+                        <div class="pull-right" style="font-size:14px;padding-top:4px">
+                            {{ trans_choice('texts.invoices_sent', $invoicesSent) }}
+                        </div>
+                    @endif
                 </h3>
             </div>
             <ul class="panel-body list-group" style="height:276px;overflow-y:auto;">
@@ -94,7 +96,7 @@
                 </li>
                 @endforeach
             </ul>
-        </div>  
+        </div>
     </div>
 
     <div class="col-md-6">
@@ -116,11 +118,11 @@
                         @foreach ($payments as $payment)
                         <tr>
                             <td>{!! \App\Models\Invoice::calcLink($payment) !!}</td>
-                            @if (\App\Models\Client::canViewItemByOwner($payment->client_user_id))
+                            @can('viewByOwner', [ENTITY_CLIENT, $payment->client_user_id])
                                 <td>{!! link_to('/clients/'.$payment->client_public_id, trim($payment->client_name) ?: (trim($payment->first_name . ' ' . $payment->last_name) ?: $payment->email)) !!}</td>
                             @else
                                 <td>{{ trim($payment->client_name) ?: (trim($payment->first_name . ' ' . $payment->last_name) ?: $payment->email) }}</td>
-                            @endif
+                            @endcan
                             <td>{{ Utils::fromSqlDate($payment->payment_date) }}</td>
                             <td>{{ Utils::formatMoney($payment->amount, $payment->currency_id ?: ($account->currency_id ?: DEFAULT_CURRENCY)) }}</td>
                         </tr>
@@ -133,7 +135,7 @@
 </div>
 
 <div class="row">
-    <div class="col-md-6">  
+    <div class="col-md-6">
         <div class="panel panel-default dashboard" style="height:320px;">
             <div class="panel-heading" style="margin:0; background-color: #f5f5f5 !important;">
                 <h3 class="panel-title" style="color: black !important">
@@ -150,14 +152,14 @@
                     </thead>
                     <tbody>
                         @foreach ($upcoming as $invoice)
-                            @if (!$invoice->is_quote)
+                            @if ($invoice->invoice_type_id == INVOICE_TYPE_STANDARD)
                                 <tr>
                                     <td>{!! \App\Models\Invoice::calcLink($invoice) !!}</td>
-                                    @if (\App\Models\Client::canViewItemByOwner($invoice->client_user_id))
+                                    @can('viewByOwner', [ENTITY_CLIENT, $invoice->client_user_id])
                                         <td>{!! link_to('/clients/'.$invoice->client_public_id, trim($invoice->client_name) ?: (trim($invoice->first_name . ' ' . $invoice->last_name) ?: $invoice->email)) !!}</td>
                                     @else
                                         <td>{{ trim($invoice->client_name) ?: (trim($invoice->first_name . ' ' . $invoice->last_name) ?: $invoice->email) }}</td>
-                                    @endif
+                                    @endcan
                                     <td>{{ Utils::fromSqlDate($invoice->due_date) }}</td>
                                     <td>{{ Utils::formatMoney($invoice->balance, $invoice->currency_id ?: ($account->currency_id ?: DEFAULT_CURRENCY)) }}</td>
                                 </tr>
@@ -185,14 +187,14 @@
                     </thead>
                     <tbody>
                         @foreach ($pastDue as $invoice)
-                            @if (!$invoice->is_quote)
+                            @if ($invoice->invoice_type_id == INVOICE_TYPE_STANDARD)
                                 <tr>
                                     <td>{!! \App\Models\Invoice::calcLink($invoice) !!}</td>
-                                    @if (\App\Models\Client::canViewItemByOwner($invoice->client_user_id))
+                                    @can('viewByOwner', [ENTITY_CLIENT, $invoice->client_user_id])
                                         <td>{!! link_to('/clients/'.$invoice->client_public_id, trim($invoice->client_name) ?: (trim($invoice->first_name . ' ' . $invoice->last_name) ?: $invoice->email)) !!}</td>
                                     @else
                                         <td>{{ trim($invoice->client_name) ?: (trim($invoice->first_name . ' ' . $invoice->last_name) ?: $invoice->email) }}</td>
-                                    @endif
+                                    @endcan
                                     <td>{{ Utils::fromSqlDate($invoice->due_date) }}</td>
                                     <td>{{ Utils::formatMoney($invoice->balance, $invoice->currency_id ?: ($account->currency_id ?: DEFAULT_CURRENCY)) }}</td>
                                 </tr>
@@ -201,13 +203,13 @@
                     </tbody>
                 </table>
             </div>
-        </div>  
+        </div>
     </div>
 </div>
 
 @if ($hasQuotes)
     <div class="row">
-        <div class="col-md-6">  
+        <div class="col-md-6">
             <div class="panel panel-default dashboard" style="height:320px;">
                 <div class="panel-heading" style="margin:0; background-color: #f5f5f5 !important;">
                     <h3 class="panel-title" style="color: black !important">
@@ -224,7 +226,7 @@
                         </thead>
                         <tbody>
                             @foreach ($upcoming as $invoice)
-                                @if ($invoice->is_quote)
+                                @if ($invoice->invoice_type_id == INVOICE_TYPE_QUOTE)
                                     <tr>
                                         <td>{!! \App\Models\Invoice::calcLink($invoice) !!}</td>
                                         <td>{!! link_to('/clients/'.$invoice->client_public_id, trim($invoice->client_name) ?: (trim($invoice->first_name . ' ' . $invoice->last_name) ?: $invoice->email)) !!}</td>
@@ -238,7 +240,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-6">  
+        <div class="col-md-6">
             <div class="panel panel-default dashboard" style="height:320px">
                 <div class="panel-heading" style="background-color:#e37329 !important">
                     <h3 class="panel-title in-bold-white">
@@ -255,7 +257,7 @@
                         </thead>
                         <tbody>
                             @foreach ($pastDue as $invoice)
-                                @if ($invoice->is_quote)
+                                @if ($invoice->invoice_type_id == INVOICE_TYPE_QUOTE)
                                     <tr>
                                         <td>{!! \App\Models\Invoice::calcLink($invoice) !!}</td>
                                         <td>{!! link_to('/clients/'.$invoice->client_public_id, trim($invoice->client_name) ?: (trim($invoice->first_name . ' ' . $invoice->last_name) ?: $invoice->email)) !!}</td>
@@ -267,7 +269,7 @@
                         </tbody>
                     </table>
                 </div>
-            </div>  
+            </div>
         </div>
     </div>
 @endif

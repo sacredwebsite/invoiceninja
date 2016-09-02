@@ -2,11 +2,22 @@
 
 use Exception;
 use Mail;
-use Utils;
 use App\Models\Invoice;
 
+/**
+ * Class Mailer
+ */
 class Mailer
 {
+    /**
+     * @param $toEmail
+     * @param $fromEmail
+     * @param $fromName
+     * @param $subject
+     * @param $view
+     * @param array $data
+     * @return bool|string
+     */
     public function sendTo($toEmail, $fromEmail, $fromName, $subject, $view, $data = [])
     {
         // check the username is set
@@ -44,6 +55,13 @@ class Mailer
                 if (!empty($data['pdfString']) && !empty($data['pdfFileName'])) {
                     $message->attachData($data['pdfString'], $data['pdfFileName']);
                 }
+                
+                // Attach documents to the email
+                if(!empty($data['documents'])){
+                    foreach($data['documents'] as $document){
+                        $message->attachData($document['data'], $document['name']);
+                    }
+                }
             });
 
             return $this->handleSuccess($response, $data);
@@ -52,6 +70,11 @@ class Mailer
         }
     }
 
+    /**
+     * @param $response
+     * @param $data
+     * @return bool
+     */
     private function handleSuccess($response, $data)
     {
         if (isset($data['invitation'])) {
@@ -71,6 +94,10 @@ class Mailer
         return true;
     }
 
+    /**
+     * @param $exception
+     * @return string
+     */
     private function handleFailure($exception)
     {
         if (isset($_ENV['POSTMARK_API_TOKEN']) && method_exists($exception, 'getResponse')) {
@@ -80,8 +107,6 @@ class Mailer
         } else {
             $emailError = $exception->getMessage();
         }
-
-        //Utils::logError("Email Error: $emailError");
         
         if (isset($data['invitation'])) {
             $invitation = $data['invitation'];

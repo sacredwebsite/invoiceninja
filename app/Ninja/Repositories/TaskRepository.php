@@ -1,11 +1,8 @@
 <?php namespace App\Ninja\Repositories;
 
 use Auth;
-use Carbon;
 use Session;
 use App\Models\Client;
-use App\Models\Contact;
-use App\Models\Activity;
 use App\Models\Task;
 
 class TaskRepository
@@ -25,7 +22,7 @@ class TaskRepository
                     ->where('clients.deleted_at', '=', null)
                     ->select(
                         'tasks.public_id',
-                        'clients.name as client_name',
+                        \DB::raw("COALESCE(NULLIF(clients.name,''), NULLIF(CONCAT(contacts.first_name, ' ', contacts.last_name),''), NULLIF(contacts.email,'')) client_name"),
                         'clients.public_id as client_public_id',
                         'clients.user_id as client_user_id',
                         'contacts.first_name',
@@ -38,6 +35,7 @@ class TaskRepository
                         'invoices.invoice_number',
                         'invoices.public_id as invoice_public_id',
                         'invoices.user_id as invoice_user_id',
+                        'invoices.balance',
                         'tasks.is_running',
                         'tasks.time_log',
                         'tasks.created_at',
@@ -64,24 +62,13 @@ class TaskRepository
         return $query;
     }
 
-    public function getErrors($input)
+    public function save($publicId, $data, $task = null)
     {
-        $rules = [
-            'time_log' => 'time_log',
-        ];
-        $validator = \Validator::make($input, $rules);
-
-        if ($validator->fails()) {
-            return $validator;
-        }
-        
-        return false;
-    }
-
-    public function save($publicId, $data)
-    {
-        if ($publicId) {
+        if ($task) {
+            // do nothing
+        } elseif ($publicId) {
             $task = Task::scope($publicId)->firstOrFail();
+            \Log::warning('Entity not set in task repo save');
         } else {
             $task = Task::createNew();
         }
@@ -100,7 +87,7 @@ class TaskRepository
         } else {
             $timeLog = [];
         }
-        
+
         array_multisort($timeLog);
 
         if (isset($data['action'])) {

@@ -1,10 +1,8 @@
 <?php namespace App\Ninja\Repositories;
 
 use DB;
-use App\Ninja\Repositories\BaseRepository;
 use App\Models\Vendor;
-use App\Models\VendorContact;
-use App\Models\Activity;
+
 // vendor
 class VendorRepository extends BaseRepository
 {
@@ -16,7 +14,7 @@ class VendorRepository extends BaseRepository
     public function all()
     {
         return Vendor::scope()
-                ->with('user', 'vendorcontacts', 'country')
+                ->with('user', 'vendor_contacts', 'country')
                 ->withTrashed()
                 ->where('is_deleted', '=', false)
                 ->get();
@@ -62,21 +60,24 @@ class VendorRepository extends BaseRepository
         return $query;
     }
 
-    public function save($data)
+    public function save($data, $vendor = null)
     {
         $publicId = isset($data['public_id']) ? $data['public_id'] : false;
 
-        if (!$publicId || $publicId == '-1') {
+        if ($vendor) {
+            // do nothing
+        } elseif (!$publicId || $publicId == '-1') {
             $vendor = Vendor::createNew();
         } else {
-            $vendor = Vendor::scope($publicId)->with('vendorcontacts')->firstOrFail();
+            $vendor = Vendor::scope($publicId)->with('vendor_contacts')->firstOrFail();
+            \Log::warning('Entity not set in vendor repo save');
         }
 
         $vendor->fill($data);
         $vendor->save();
 
         $first              = true;
-        $vendorcontacts     = isset($data['vendorcontact']) ? [$data['vendorcontact']] : $data['vendorcontacts'];
+        $vendorcontacts     = isset($data['vendor_contact']) ? [$data['vendor_contact']] : $data['vendor_contacts'];
 
         foreach ($vendorcontacts as $vendorcontact) {
             $vendorcontact      = $vendor->addVendorContact($vendorcontact, $first);

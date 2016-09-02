@@ -3,16 +3,15 @@
 use Utils;
 use Response;
 use Input;
-use Auth;
 use App\Models\Vendor;
 use App\Ninja\Repositories\VendorRepository;
 use App\Http\Requests\CreateVendorRequest;
-use App\Http\Controllers\BaseAPIController;
-use App\Ninja\Transformers\VendorTransformer;
 
 class VendorApiController extends BaseAPIController
 {
     protected $vendorRepo;
+
+    protected $entityType = ENTITY_VENDOR;
 
     public function __construct(VendorRepository $vendorRepo)
     {
@@ -46,17 +45,11 @@ class VendorApiController extends BaseAPIController
      */
     public function index()
     {
-        $vendors    = Vendor::scope()
-                    ->with($this->getIncluded())
+        $vendors = Vendor::scope()
                     ->withTrashed()
-                    ->orderBy('created_at', 'desc')
-                    ->paginate();
+                    ->orderBy('created_at', 'desc');
 
-        $transformer    = new VendorTransformer(Auth::user()->account, Input::get('serializer'));
-        $paginator      = Vendor::scope()->paginate();
-        $data           = $this->createCollection($vendors, $transformer, ENTITY_VENDOR, $paginator);
-
-        return $this->response($data);
+        return $this->listResponse($vendors);
     }
 
     /**
@@ -85,11 +78,9 @@ class VendorApiController extends BaseAPIController
         $vendor = $this->vendorRepo->save($request->input());
 
         $vendor = Vendor::scope($vendor->public_id)
-                    ->with('country', 'vendorcontacts', 'industry', 'size', 'currency')
+                    ->with('country', 'vendor_contacts', 'industry', 'size', 'currency')
                     ->first();
 
-        $transformer = new VendorTransformer(Auth::user()->account, Input::get('serializer'));
-        $data = $this->createItem($vendor, $transformer, ENTITY_VENDOR);
-        return $this->response($data);
+        return $this->itemResponse($vendor);
     }
 }

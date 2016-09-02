@@ -1,26 +1,33 @@
 <?php namespace App\Models;
 
 use Session;
-use Auth;
 use Event;
 use App\Libraries\Utils;
 use App\Events\UserSettingsChanged;
 use App\Events\UserSignedUp;
 use Illuminate\Auth\Authenticatable;
+use Illuminate\Foundation\Auth\Access\Authorizable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Auth\Passwords\CanResetPassword;
 use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
+use Illuminate\Contracts\Auth\Access\Authorizable as AuthorizableContract;
 use Illuminate\Contracts\Auth\CanResetPassword as CanResetPasswordContract;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class User extends Model implements AuthenticatableContract, CanResetPasswordContract {
-    public static $all_permissions = array(
+/**
+ * Class User
+ */
+class User extends Model implements AuthenticatableContract, AuthorizableContract, CanResetPasswordContract {
+    /**
+     * @var array
+     */
+    public static $all_permissions = [
         'create_all' => 0b0001,
         'view_all' => 0b0010,
         'edit_all' => 0b0100,
-    );    
-    
-    use Authenticatable, CanResetPassword;
+    ];
+
+    use Authenticatable, Authorizable, CanResetPassword;
 
     /**
      * The database table used by the model.
@@ -50,28 +57,46 @@ class User extends Model implements AuthenticatableContract, CanResetPasswordCon
     protected $hidden = ['password', 'remember_token', 'confirmation_code'];
 
     use SoftDeletes;
+    /**
+     * @var array
+     */
     protected $dates = ['deleted_at'];
 
+    /**
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
     public function account()
     {
         return $this->belongsTo('App\Models\Account');
     }
 
+    /**
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
     public function theme()
     {
         return $this->belongsTo('App\Models\Theme');
     }
 
+    /**
+     * @param $value
+     */
     public function setEmailAttribute($value)
     {
         $this->attributes['email'] = $this->attributes['username'] = $value;
     }
 
+    /**
+     * @return mixed|string
+     */
     public function getName()
     {
         return $this->getDisplayName();
     }
 
+    /**
+     * @return mixed
+     */
     public function getPersonType()
     {
         return PERSON_USER;
@@ -107,31 +132,51 @@ class User extends Model implements AuthenticatableContract, CanResetPasswordCon
         return $this->email;
     }
 
+    /**
+     * @return mixed
+     */
     public function isPro()
     {
         return $this->account->isPro();
     }
 
-    public function isPaidPro()
+    /**
+     * @param $feature
+     * @return mixed
+     */
+    public function hasFeature($feature)
     {
-        return $this->isPro() && ! $this->isTrial();
+        return $this->account->hasFeature($feature);
     }
 
+    /**
+     * @return mixed
+     */
     public function isTrial()
     {
         return $this->account->isTrial();
     }
 
-    public function isEligibleForTrial()
+    /**
+     * @param null $plan
+     * @return mixed
+     */
+    public function isEligibleForTrial($plan = null)
     {
-        return $this->account->isEligibleForTrial();
+        return $this->account->isEligibleForTrial($plan);
     }
 
+    /**
+     * @return int
+     */
     public function maxInvoiceDesignId()
     {
-        return $this->isPro() ? 11 : (Utils::isNinja() ? COUNT_FREE_DESIGNS : COUNT_FREE_DESIGNS_SELF_HOST);
+        return $this->hasFeature(FEATURE_MORE_INVOICE_DESIGNS) ? 11 : (Utils::isNinja() ? COUNT_FREE_DESIGNS : COUNT_FREE_DESIGNS_SELF_HOST);
     }
 
+    /**
+     * @return mixed|string
+     */
     public function getDisplayName()
     {
         if ($this->getFullName()) {
@@ -143,6 +188,9 @@ class User extends Model implements AuthenticatableContract, CanResetPasswordCon
         }
     }
 
+    /**
+     * @return string
+     */
     public function getFullName()
     {
         if ($this->first_name || $this->last_name) {
@@ -152,16 +200,27 @@ class User extends Model implements AuthenticatableContract, CanResetPasswordCon
         }
     }
 
+    /**
+     * @return bool
+     */
     public function showGreyBackground()
     {
         return !$this->theme_id || in_array($this->theme_id, [2, 3, 5, 6, 7, 8, 10, 11, 12]);
     }
 
+    /**
+     * @return mixed
+     */
     public function getRequestsCount()
     {
         return Session::get(SESSION_COUNTER, 0);
     }
-    
+
+    /**
+     * @param bool $success
+     * @param bool $forced
+     * @return bool
+     */
     public function afterSave($success = true, $forced = false)
     {
         if ($this->email) {
@@ -171,9 +230,12 @@ class User extends Model implements AuthenticatableContract, CanResetPasswordCon
         }
     }
 
+    /**
+     * @return mixed
+     */
     public function getMaxNumClients()
     {
-        if ($this->isPro() && ! $this->isTrial()) {
+        if ($this->hasFeature(FEATURE_MORE_CLIENTS)) {
             return MAX_NUM_CLIENTS_PRO;
         }
 
@@ -184,26 +246,38 @@ class User extends Model implements AuthenticatableContract, CanResetPasswordCon
         return MAX_NUM_CLIENTS;
     }
 
+    /**
+     * @return mixed
+     */
     public function getMaxNumVendors()
     {
-        if ($this->isPro() && ! $this->isTrial()) {
+        if ($this->hasFeature(FEATURE_MORE_CLIENTS)) {
             return MAX_NUM_VENDORS_PRO;
         }
 
         return MAX_NUM_VENDORS;
     }
-    
-    
+
+
+    /**
+     * @return mixed
+     */
     public function getRememberToken()
     {
         return $this->remember_token;
     }
 
+    /**
+     * @param string $value
+     */
     public function setRememberToken($value)
     {
         $this->remember_token = $value;
     }
 
+    /**
+     * @return string
+     */
     public function getRememberTokenName()
     {
         return 'remember_token';
@@ -227,6 +301,9 @@ class User extends Model implements AuthenticatableContract, CanResetPasswordCon
         }
     }
 
+    /**
+     * @param $user
+     */
     public static function onUpdatingUser($user)
     {
         if ($user->password != $user->getOriginal('password')) {
@@ -240,6 +317,9 @@ class User extends Model implements AuthenticatableContract, CanResetPasswordCon
         }
     }
 
+    /**
+     * @param $user
+     */
     public static function onUpdatedUser($user)
     {
         if (!$user->getOriginal('email')
@@ -252,15 +332,18 @@ class User extends Model implements AuthenticatableContract, CanResetPasswordCon
         event(new UserSettingsChanged($user));
     }
 
+    /**
+     * @return bool
+     */
     public function isEmailBeingChanged()
     {
         return Utils::isNinjaProd()
                 && $this->email != $this->getOriginal('email')
                 && $this->getOriginal('confirmed');
     }
-    
-    
-    
+
+
+
     /**
      * Set the permissions attribute on the model.
      *
@@ -270,18 +353,21 @@ class User extends Model implements AuthenticatableContract, CanResetPasswordCon
      protected function setPermissionsAttribute($value){
          if(empty($value)) {
              $this->attributes['permissions'] = 0;
-         } else {         
+         } else {
              $bitmask = 0;
              foreach($value as $permission){
+                if ( ! $permission) {
+                    continue;
+                }
                 $bitmask = $bitmask | static::$all_permissions[$permission];
              }
 
              $this->attributes['permissions'] = $bitmask;
          }
-         
+
          return $this;
     }
-    
+
     /**
      * Expands the value of the permissions attribute
      *
@@ -289,16 +375,16 @@ class User extends Model implements AuthenticatableContract, CanResetPasswordCon
      * @return mixed
      */
     protected function getPermissionsAttribute($value){
-        $permissions = array();
+        $permissions = [];
         foreach(static::$all_permissions as $permission => $bitmask){
             if(($value & $bitmask) == $bitmask) {
                 $permissions[$permission] = $permission;
             }
         }
-         
+
         return $permissions;
     }
-    
+
     /**
      * Checks to see if the user has the required permission
      *
@@ -318,8 +404,43 @@ class User extends Model implements AuthenticatableContract, CanResetPasswordCon
                 return count(array_intersect($permission, $this->permissions)) > 0;
             }
         }
-        
+
         return false;
+    }
+
+    /**
+     * @param $entity
+     * @return bool
+     */
+    public function owns($entity) {
+        return !empty($entity->user_id) && $entity->user_id == $this->id;
+    }
+
+    /**
+     * @return bool|mixed
+     */
+    public function filterId() {
+        return $this->hasPermission('view_all') ? false : $this->id;
+    }
+
+
+    public function caddAddUsers()
+    {
+        if ( ! Utils::isNinja()) {
+            return true;
+        } elseif ( ! $this->hasFeature(FEATURE_USERS)) {
+            return false;
+        }
+
+        $account = $this->account;
+        $company = $account->company;
+
+        $numUsers = 1;
+        foreach ($company->accounts as $account) {
+            $numUsers += $account->users->count() - 1;
+        }
+
+        return $numUsers < $company->num_users;
     }
 }
 

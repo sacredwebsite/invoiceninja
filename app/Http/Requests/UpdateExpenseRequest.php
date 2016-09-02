@@ -1,10 +1,6 @@
-<?php namespace app\Http\Requests;
+<?php namespace App\Http\Requests;
 
-use App\Http\Requests\Request;
-use Illuminate\Validation\Factory;
-
-
-class UpdateExpenseRequest extends Request
+class UpdateExpenseRequest extends ExpenseRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -13,7 +9,7 @@ class UpdateExpenseRequest extends Request
      */
     public function authorize()
     {
-        return true;
+        return $this->user()->can('edit', $this->entity());
     }
 
     /**
@@ -25,7 +21,6 @@ class UpdateExpenseRequest extends Request
     {
           return [
             'amount' => 'numeric',
-    		'expense_date' => 'required',
         ];
     }
 }

@@ -4,9 +4,17 @@ use Redirect;
 use Utils;
 use Exception;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
-use Illuminate\Database\Eloquent\ModelNotFoundException; 
+use Illuminate\Http\Exception\HttpResponseException;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Illuminate\Validation\ValidationException;
 
-class Handler extends ExceptionHandler {
+/**
+ * Class Handler
+ */
+class Handler extends ExceptionHandler
+{
 
 	/**
 	 * A list of the exception types that should not be reported.
@@ -14,20 +22,28 @@ class Handler extends ExceptionHandler {
 	 * @var array
 	 */
 	protected $dontReport = [
-		'Symfony\Component\HttpKernel\Exception\HttpException'
+        AuthorizationException::class,
+        HttpException::class,
+        ModelNotFoundException::class,
+        ValidationException::class,
 	];
 
-	/**
-	 * Report or log an exception.
-	 *
-	 * This is a great spot to send exceptions to Sentry, Bugsnag, etc.
-	 *
-	 * @param  \Exception  $e
-	 * @return void
-	 */
+    /**
+     * Report or log an exception.
+     *
+     * This is a great spot to send exceptions to Sentry, Bugsnag, etc.
+     *
+     * @param  \Exception $e
+     * @return bool|void
+     */
 	public function report(Exception $e)
 	{
-        if (Utils::isNinja()) {
+        // don't show these errors in the logs
+        if ($e instanceof HttpResponseException) {
+            return false;
+        }
+        
+        if (Utils::isNinja() && ! Utils::isTravis()) {
             Utils::logError(Utils::getErrorString($e));
             return false;
         } else {
@@ -60,7 +76,9 @@ class Handler extends ExceptionHandler {
         }
 
         // In production, except for maintenance mode, we'll show a custom error screen
-        if (Utils::isNinjaProd() && !Utils::isDownForMaintenance()) {
+        if (Utils::isNinjaProd()
+            && !Utils::isDownForMaintenance()
+            && !($e instanceof HttpResponseException)) {
             $data = [
                 'error' => get_class($e),
                 'hideHeader' => true,
